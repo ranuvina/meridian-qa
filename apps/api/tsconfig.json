@@ -2,7 +2,9 @@
   "compilerOptions": {
     "module": "commonjs",
     "target": "ES2022",
-    "lib": ["ES2022"],
+    "lib": [
+      "ES2022"
+    ],
     "moduleResolution": "node",
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
@@ -14,5 +16,10 @@
     "strictNullChecks": false,
     "forceConsistentCasingInFileNames": true
   },
-  "include": ["src/**/*"]
+  "include": [
+    "src/**/*"
+  ],
+  "exclude": [
+    "src/**/*.spec.ts"
+  ]
 }

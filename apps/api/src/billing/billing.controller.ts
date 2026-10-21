@@ -11,7 +11,7 @@ export class BillingController {
   constructor(private readonly db: DbService, private readonly billing: BillingService) {}
 
   @Get('events')
-  @Roles('OWNER', 'ADMIN', 'BILLING', 'VIEWER')
+  @Roles('OWNER', 'ADMIN', 'BILLING')
   events(@Actor() actor: RequestActor) {
     return this.db.query(
       `SELECT id, period, overage_requests, amount, provider_ref, created_at
@@ -23,7 +23,7 @@ export class BillingController {
   }
 
   @Get('invoice-preview')
-  @Roles('OWNER', 'ADMIN', 'BILLING', 'VIEWER')
+  @Roles('OWNER', 'ADMIN', 'BILLING')
   preview(@Actor() actor: RequestActor) {
     return this.billing.previewInvoice(actor.tenantId);
   }

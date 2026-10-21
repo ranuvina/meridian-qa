@@ -1,6 +1,9 @@
 import { Injectable } from '@nestjs/common';
-import { createHash } from 'crypto';
+import { createHash, timingSafeEqual } from 'crypto';
 import { DbService } from '../db/db.service';
+import { RedisService } from '../db/redis.service';
+
+export type KeyScope = 'read' | 'write';
 
 export interface ResolvedKey {
   keyId: string;
@@ -9,46 +12,119 @@ export interface ResolvedKey {
   plan: string;
   timezone: string;
   suspended: boolean;
+  rateLimitOverride: number | null;
+  scopes: KeyScope[];
+  /** True when the request authenticated with the pre-rotation secret inside its grace period. */
+  viaPreviousSecret: boolean;
 }
 
-const CACHE_TTL_MS = 60_000;
+/** Cached per prefix in Redis (shared by every API replica) and invalidated on revoke/rotate. */
+interface CachedKeyRecord {
+  id: string;
+  tenantId: string;
+  prefix: string;
+  secretHash: string;
+  previousSecretHash: string | null;
+  previousSecretExpiresAt: number | null; // epoch ms
+  scopes: KeyScope[];
+}
+
+export const KEY_CACHE_TTL_SECONDS = 60;
+
+export function hashSecret(secret: string): string {
+  return createHash('sha256').update(secret).digest('hex');
+}
+
+function sameHash(a: string, b: string | null): boolean {
+  if (!b || a.length !== b.length) return false;
+  return timingSafeEqual(Buffer.from(a), Buffer.from(b));
+}
 
 @Injectable()
 export class ApiKeyService {
-  private cache = new Map<string, { value: ResolvedKey | null; expiresAt: number }>();
+  constructor(private readonly db: DbService, private readonly redis: RedisService) {}
 
-  constructor(private readonly db: DbService) {}
+  static cacheKey(prefix: string) {
+    return `keycache:${prefix}`;
+  }
 
-  async resolve(rawKey: string): Promise<ResolvedKey | null> {
-    const cached = this.cache.get(rawKey);
-    if (cached && cached.expiresAt > Date.now()) {
-      return cached.value;
-    }
+  /** Must be called after any change to a key's secret, scopes or revocation (DEF-005). */
+  async invalidate(prefix: string) {
+    await this.redis.client.del(ApiKeyService.cacheKey(prefix));
+  }
 
-    const [prefix, secret] = String(rawKey).split('.');
-    if (!prefix || !secret) return null;
+  private async loadRecord(prefix: string): Promise<CachedKeyRecord | null> {
+    const cached = await this.redis.client.get(ApiKeyService.cacheKey(prefix));
+    if (cached) return cached === 'null' ? null : JSON.parse(cached);
 
-    const hash = createHash('sha256').update(secret).digest('hex');
     const row = await this.db.one(
-      `SELECT k.id, k.tenant_id, k.prefix, t.plan, t.timezone, t.suspended
-         FROM api_keys k
-         JOIN tenants t ON t.id = k.tenant_id
-        WHERE k.prefix = $1 AND k.secret_hash = $2 AND k.revoked_at IS NULL`,
-      [prefix, hash],
+      `SELECT id, tenant_id, prefix, secret_hash, previous_secret_hash,
+              previous_secret_expires_at, scopes
+         FROM api_keys
+        WHERE prefix = $1 AND revoked_at IS NULL`,
+      [prefix],
     );
-
-    const value: ResolvedKey | null = row
+    const record: CachedKeyRecord | null = row
       ? {
-          keyId: row.id,
+          id: row.id,
           tenantId: row.tenant_id,
           prefix: row.prefix,
-          plan: row.plan,
-          timezone: row.timezone,
-          suspended: row.suspended,
+          secretHash: row.secret_hash,
+          previousSecretHash: row.previous_secret_hash,
+          previousSecretExpiresAt: row.previous_secret_expires_at
+            ? new Date(row.previous_secret_expires_at).getTime()
+            : null,
+          scopes: row.scopes,
         }
       : null;
+    // Misses are cached briefly too, but in Redis with a TTL, so unknown keys cannot
+    // grow process memory without bound (DEF-027).
+    await this.redis.client.set(
+      ApiKeyService.cacheKey(prefix),
+      JSON.stringify(record),
+      'EX',
+      record ? KEY_CACHE_TTL_SECONDS : 5,
+    );
+    return record;
+  }
 
-    this.cache.set(rawKey, { value, expiresAt: Date.now() + CACHE_TTL_MS });
-    return value;
+  async resolve(rawKey: string): Promise<ResolvedKey | null> {
+    const raw = String(rawKey);
+    const dot = raw.indexOf('.');
+    if (dot <= 0 || dot === raw.length - 1) return null;
+    const prefix = raw.slice(0, dot);
+    const secret = raw.slice(dot + 1);
+
+    const record = await this.loadRecord(prefix);
+    if (!record) return null;
+
+    const hash = hashSecret(secret);
+    let viaPreviousSecret = false;
+    if (!sameHash(hash, record.secretHash)) {
+      const graceOk =
+        record.previousSecretExpiresAt !== null && record.previousSecretExpiresAt > Date.now();
+      if (!graceOk || !sameHash(hash, record.previousSecretHash)) return null;
+      viaPreviousSecret = true;
+    }
+
+    // Tenant state is read live (one primary-key lookup) so plan, override and suspension
+    // changes apply on the next request (A1: "takes effect on the next request").
+    const tenant = await this.db.one(
+      `SELECT plan, timezone, suspended, rate_limit_override FROM tenants WHERE id = $1`,
+      [record.tenantId],
+    );
+    if (!tenant) return null;
+
+    return {
+      keyId: record.id,
+      tenantId: record.tenantId,
+      prefix: record.prefix,
+      plan: tenant.plan,
+      timezone: tenant.timezone,
+      suspended: tenant.suspended,
+      rateLimitOverride: tenant.rate_limit_override,
+      scopes: record.scopes,
+      viaPreviousSecret,
+    };
   }
 }

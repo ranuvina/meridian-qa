@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { createHmac, randomUUID } from 'crypto';
 import { DbService } from '../db/db.service';
+import { checkWebhookUrl } from './url-safety';
 
 const MAX_ATTEMPTS = 3;
 const TIMEOUT_MS = 3000;
@@ -38,7 +39,11 @@ export class WebhooksService {
     const signature = this.sign(endpoint.secret, body);
 
     let status: number | null = null;
-    try {
+    // Re-checked at delivery time: DNS may have changed since the endpoint was created.
+    const safe = await checkWebhookUrl(endpoint.url);
+    const blocked = safe.ok === false;
+    if (blocked) this.logger.warn(`Refusing delivery to ${endpoint.url}: unsafe target`);
+    if (!blocked) try {
       const res = await fetch(endpoint.url, {
         method: 'POST',
         headers: {
@@ -68,7 +73,7 @@ export class WebhooksService {
       ],
     );
 
-    if ((!status || status >= 500) && attempt < MAX_ATTEMPTS) {
+    if (!blocked && (!status || status >= 500) && attempt < MAX_ATTEMPTS) {
       await new Promise((r) => setTimeout(r, 250 * attempt));
       return this.deliver(endpoint, eventType, payload, attempt + 1);
     }

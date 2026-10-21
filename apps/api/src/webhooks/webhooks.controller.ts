@@ -6,6 +6,7 @@ import { Actor, RequestActor, Roles } from '../common/decorators';
 import { DbService } from '../db/db.service';
 import { WebhooksService } from './webhooks.service';
 import { AuditService } from '../audit/audit.service';
+import { checkWebhookUrl } from './url-safety';
 
 @Controller('webhooks')
 @UseGuards(JwtGuard, RolesGuard)
@@ -29,6 +30,8 @@ export class WebhooksController {
   @Roles('OWNER', 'ADMIN')
   async create(@Actor() actor: RequestActor, @Body() body: { label?: string; url?: string }) {
     if (!body?.url || !body?.label) throw new BadRequestException('label and url required');
+    const check = await checkWebhookUrl(body.url);
+    if (check.ok === false) throw new BadRequestException(check.reason);
     const secret = randomBytes(16).toString('hex');
     const endpoint = await this.db.one(
       `INSERT INTO webhook_endpoints (tenant_id, label, url, secret)

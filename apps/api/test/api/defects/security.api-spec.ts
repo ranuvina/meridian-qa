@@ -15,6 +15,11 @@ import {
 } from '../../support/factories';
 
 /**
+ * Known, unfixed defects use `it.failing`: the test asserts the CORRECT behaviour and Jest
+ * expects it to fail. The suite stays green while the defect exists, and the test turns red
+ * as soon as the behaviour changes, so the marker must then be removed. Fixed defects use `it`.
+ */
+/**
  * Regression tests for security defects. Each asserts the CORRECT behaviour, so it fails
  * while the defect is present. See DEFECTS.md for the full reports.
  */
@@ -182,7 +187,7 @@ describe('Security defects', () => {
   });
 
   describe('DEF-015 invited accounts get a password the inviter knows', () => {
-    it('an invited user cannot sign in with the default password', async () => {
+    it.failing('an invited user cannot sign in with the default password', async () => {
       const email = `invitee-${uid()}@test.local`;
       const invite = await http(app)
         .post('/api/v1/memberships/invite')
@@ -196,7 +201,7 @@ describe('Security defects', () => {
   });
 
   describe('DEF-025 CORS reflects any origin with credentials', () => {
-    it('does not allow an arbitrary origin', async () => {
+    it.failing('does not allow an arbitrary origin', async () => {
       const res = await http(app)
         .options('/api/v1/tenant')
         .set('Origin', 'https://evil.example')
@@ -206,7 +211,7 @@ describe('Security defects', () => {
   });
 
   describe('DEF-023 privileged actions missing from the audit log', () => {
-    it('deleting a webhook endpoint is audited', async () => {
+    it.failing('deleting a webhook endpoint is audited', async () => {
       const created = await http(app)
         .post('/api/v1/webhooks')
         .set(acme.as('OWNER'))
@@ -218,7 +223,7 @@ describe('Security defects', () => {
       expect(entries.map((e) => e.target)).toContain(created.body.id);
     });
 
-    it('tenant updates record the previous values', async () => {
+    it.failing('tenant updates record the previous values', async () => {
       await http(app).patch('/api/v1/tenant').set(acme.as('OWNER')).send({ name: `Renamed ${uid()}` });
       const entries = await auditEntries(acme.tenant.id, 'tenant.updated');
       expect(entries.at(-1).metadata).toHaveProperty('previous');

@@ -2,14 +2,14 @@ import { Injectable } from '@nestjs/common';
 import { DbService } from '../db/db.service';
 import { planFor, PlanTier } from '../common/plans';
 import { ResolvedKey } from './api-key.service';
+import { currentPeriod } from '../billing/billing.service';
 
 @Injectable()
 export class MeterService {
   constructor(private readonly db: DbService) {}
 
   private currentPeriod(): string {
-    const now = new Date();
-    return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`;
+    return currentPeriod();
   }
 
   async quotaRemaining(tenantId: string, plan: PlanTier): Promise<number> {

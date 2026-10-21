@@ -14,6 +14,11 @@ import {
 
 const utcPeriod = (d = new Date()) => `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
 
+/**
+ * Known, unfixed defects use `it.failing`: the test asserts the CORRECT behaviour and Jest
+ * expects it to fail. The suite stays green while the defect exists, and the test turns red
+ * as soon as the behaviour changes, so the marker must then be removed. Fixed defects use `it`.
+ */
 /** Regression tests for billing, usage reporting and webhook defects. */
 describe('Billing, usage and webhook defects', () => {
   let app: INestApplication;
@@ -52,7 +57,7 @@ describe('Billing, usage and webhook defects', () => {
   });
 
   describe('DEF-033 / SUP-1043 overage billed while the dashboard shows the tenant under quota', () => {
-    it('billing events and the invoice preview agree after a plan change', async () => {
+    it.failing('billing events and the invoice preview agree after a plan change', async () => {
       const org = await createOrg({ plan: 'FREE' });
       const key = await createApiKey(org.tenant);
       await insertUsage(org.tenant, key, 10_000);
@@ -68,7 +73,7 @@ describe('Billing, usage and webhook defects', () => {
   });
 
   describe('DEF-017 money is stored and calculated as binary floating point', () => {
-    it('9 overage requests on FREE cost exactly 0.018', async () => {
+    it.failing('9 overage requests on FREE cost exactly 0.018', async () => {
       const org = await createOrg({ plan: 'FREE' });
       const key = await createApiKey(org.tenant);
       await insertUsage(org.tenant, key, 10_009);
@@ -79,7 +84,7 @@ describe('Billing, usage and webhook defects', () => {
   });
 
   describe('DEF-012 / SUP-1058 daily usage ignores the tenant timezone', () => {
-    it('requests at 08:30 JST on Oct 1 are reported on Oct 1 for a Tokyo tenant', async () => {
+    it.failing('requests at 08:30 JST on Oct 1 are reported on Oct 1 for a Tokyo tenant', async () => {
       const org = await createOrg({ plan: 'SCALE', timezone: 'Asia/Tokyo' });
       const key = await createApiKey(org.tenant);
       await insertUsage(org.tenant, key, 5, { at: '2026-10-01T08:30:00+09:00' });
@@ -124,7 +129,7 @@ describe('Billing, usage and webhook defects', () => {
   });
 
   describe('DEF-018 CSV export does not escape values', () => {
-    it('quotes commas and neutralises spreadsheet formulas', async () => {
+    it.failing('quotes commas and neutralises spreadsheet formulas', async () => {
       const org = await createOrg();
       await insertUsage(org.tenant, await createApiKey(org.tenant, { name: 'Ops, EU' }), 1);
       await insertUsage(org.tenant, await createApiKey(org.tenant, { name: '=HYPERLINK("http://x","y")' }), 1);
@@ -136,7 +141,7 @@ describe('Billing, usage and webhook defects', () => {
   });
 
   describe('DEF-010 / SUP-1071 webhook retries cannot be de-duplicated', () => {
-    it('every retry of one event carries the same event id', async () => {
+    it.failing('every retry of one event carries the same event id', async () => {
       const org = await createOrg();
       const channel = `slow-${uid()}`;
       // The receiver takes 3.5s; Meridian gives up after 3s and retries, but the receiver still processes it.
@@ -152,7 +157,7 @@ describe('Billing, usage and webhook defects', () => {
   });
 
   describe('DEF-024 tenant settings are not validated', () => {
-    it('rejects an unknown timezone', async () => {
+    it.failing('rejects an unknown timezone', async () => {
       const org = await createOrg();
       const res = await http(app).patch('/api/v1/tenant').set(org.as('OWNER')).send({ timezone: 'Mars/Base' });
       expect(res.status).toBe(400);

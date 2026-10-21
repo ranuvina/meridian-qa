@@ -30,13 +30,14 @@ export class UsageController {
 
   @Get('export')
   async export(
+    @Actor() actor: RequestActor,
     @Res() res: Response,
     @Query('keyId') keyId?: string,
     @Query('from') from?: string,
     @Query('to') to?: string,
   ) {
     const range = defaultRange(from, to);
-    const rows = await this.usage.exportRows(keyId ?? null, range.from, range.to);
+    const rows = await this.usage.exportRows(actor.tenantId, keyId ?? null, range.from, range.to);
     const csv = this.usage.toCsv(rows);
     res.setHeader('Content-Type', 'text/csv');
     res.setHeader('Content-Disposition', 'attachment; filename="usage.csv"');

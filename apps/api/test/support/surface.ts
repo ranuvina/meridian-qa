@@ -57,6 +57,29 @@ export const ENDPOINTS: Record<string, CallBuilder> = {
     return { method: 'delete', path: `/api/v1/webhooks/${hook.id}` };
   },
   'GET /webhooks/deliveries': async () => ({ method: 'get', path: '/api/v1/webhooks/deliveries' }),
+  // Feature specs A1 / A2
+  'PATCH /tenant/rate-limit': async () => ({
+    method: 'patch',
+    path: '/api/v1/tenant/rate-limit',
+    body: { rateLimitPerMinute: 1000 + Math.floor(Math.random() * 1000) },
+  }),
+  'DELETE /tenant/rate-limit': async () => ({ method: 'delete', path: '/api/v1/tenant/rate-limit' }),
+  'POST /keys/:id/rotate': async (org) => {
+    const key = await createApiKey(org.tenant);
+    return { method: 'post', path: `/api/v1/keys/${key.id}/rotate`, body: { gracePeriodSeconds: 60 } };
+  },
+};
+
+/**
+ * Capabilities introduced by the feature specs, which docs/rbac-matrix.md does not list yet.
+ * A1: "An OWNER can set a custom requests-per-minute limit". A2: "Rotation requires OWNER or ADMIN".
+ */
+export const FEATURE_CAPABILITIES: Record<string, { endpoints: string[]; roles: MemberRole[] }> = {
+  'Set or remove rate-limit override (A1)': {
+    endpoints: ['PATCH /tenant/rate-limit', 'DELETE /tenant/rate-limit'],
+    roles: ['OWNER'],
+  },
+  'Rotate API key (A2)': { endpoints: ['POST /keys/:id/rotate'], roles: ['OWNER', 'ADMIN'] },
 };
 
 /** Which endpoints exercise each capability row of docs/rbac-matrix.md. */

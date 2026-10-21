@@ -1,7 +1,7 @@
 import { INestApplication } from '@nestjs/common';
 import { http, startApp, stopApp } from '../support/app';
 import { accessTokenFor, createOrg, createUser, Org, ROLES } from '../support/factories';
-import { CAPABILITY_ENDPOINTS, Call, ENDPOINTS, readRbacMatrix } from '../support/surface';
+import { CAPABILITY_ENDPOINTS, Call, ENDPOINTS, FEATURE_CAPABILITIES, readRbacMatrix } from '../support/surface';
 
 /**
  * Role x endpoint x tenant authorisation matrix.
@@ -35,11 +35,22 @@ describe('Authorisation matrix', () => {
     expect([...mappedEndpoints].filter((e) => !ENDPOINTS[e])).toEqual([]);
   });
 
-  const cases = matrix.flatMap((row) =>
-    (CAPABILITY_ENDPOINTS[row.capability] ?? []).flatMap((endpoint) =>
-      ROLES.map((role) => ({ capability: row.capability, endpoint, role, allowed: row.allowed[role] })),
+  const cases = [
+    ...matrix.flatMap((row) =>
+      (CAPABILITY_ENDPOINTS[row.capability] ?? []).flatMap((endpoint) =>
+        ROLES.map((role) => ({ capability: row.capability, endpoint, role, allowed: row.allowed[role] })),
+      ),
     ),
-  );
+    ...Object.entries(FEATURE_CAPABILITIES).flatMap(([capability, spec]) =>
+      spec.endpoints.flatMap((endpoint) =>
+        ROLES.map((role) => ({ capability, endpoint, role, allowed: spec.roles.includes(role) })),
+      ),
+    ),
+  ];
+
+  it('covers every endpoint of the surface', () => {
+    expect(new Set(cases.map((c) => c.endpoint))).toEqual(new Set(Object.keys(ENDPOINTS)));
+  });
 
   it.each(cases)('$capability | $endpoint | $role -> allowed=$allowed', async ({ endpoint, role, allowed }) => {
     const call = await ENDPOINTS[endpoint](org);

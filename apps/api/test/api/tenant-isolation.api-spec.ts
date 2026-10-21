@@ -105,6 +105,19 @@ describe('Tenant isolation', () => {
     expect(rows).toHaveLength(1);
   });
 
+  it('POST /keys/<B key>/rotate is 404 and the key keeps its secret', async () => {
+    const victimKey = await createApiKey(b.tenant);
+    const res = await http(app).post(`/api/v1/keys/${victimKey.id}/rotate`).set(a.as('OWNER')).send({});
+    expect(res.status).toBe(404);
+    expect((await http(app).get('/api/v1/gw/ping').set('x-api-key', victimKey.secret)).status).toBe(200);
+  });
+
+  it('PATCH /tenant/rate-limit as A never changes B', async () => {
+    await http(app).patch('/api/v1/tenant/rate-limit').set(a.as('OWNER')).send({ rateLimitPerMinute: 4321 });
+    const { rows } = await db().query(`SELECT rate_limit_override FROM tenants WHERE id = $1`, [b.tenant.id]);
+    expect(rows[0].rate_limit_override).toBeNull();
+  });
+
   it('POST /billing/sync as A never charges B', async () => {
     await http(app).post('/api/v1/billing/sync').set(a.as('OWNER'));
     expect(await provider.charges(b.tenant.id)).toHaveLength(0);

@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, Req, UseGuards, ForbiddenException } from '@nestjs/common';
+import { Body, Controller, Get, Post, Req, UseGuards } from '@nestjs/common';
 import { RateLimitGuard } from './rate-limit.guard';
 import { MeterService } from './meter.service';
 
@@ -10,7 +10,6 @@ export class GatewayController {
   @Get('ping')
   async ping(@Req() req: any) {
     const started = Date.now();
-    if (req.apiKey.suspended) throw new ForbiddenException('Tenant suspended');
     const result = { pong: true, tenant: req.apiKey.tenantId, at: new Date().toISOString() };
     await this.meter.record(req.apiKey, 'GET /gw/ping', 200, Date.now() - started);
     return result;
@@ -19,7 +18,6 @@ export class GatewayController {
   @Post('echo')
   async echo(@Req() req: any, @Body() body: any) {
     const started = Date.now();
-    if (req.apiKey.suspended) throw new ForbiddenException('Tenant suspended');
     await this.meter.record(req.apiKey, 'POST /gw/echo', 200, Date.now() - started);
     return { echo: body ?? null };
   }
@@ -27,7 +25,6 @@ export class GatewayController {
   @Post('transform')
   async transform(@Req() req: any, @Body() body: { text?: string; op?: string }) {
     const started = Date.now();
-    if (req.apiKey.suspended) throw new ForbiddenException('Tenant suspended');
     const text = body?.text ?? '';
     const op = body?.op ?? 'upper';
     const out =
