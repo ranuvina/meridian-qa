@@ -1,0 +1,13 @@
+{
+  "name": "meridian",
+  "private": true,
+  "workspaces": ["apps/*"],
+  "scripts": {
+    "seed": "node scripts/seed.js",
+    "seed:large": "node scripts/seed.js --large"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "pg": "^8.13.1"
+  }
+}

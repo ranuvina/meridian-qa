@@ -1,0 +1,55 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: meridian
+      POSTGRES_PASSWORD: meridian
+      POSTGRES_DB: meridian
+    ports: ["5432:5432"]
+    volumes:
+      - ./db/001_init.sql:/docker-entrypoint-initdb.d/001_init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U meridian"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    ports: ["6379:6379"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  mock-billing:
+    build: ./apps/mock-billing
+    ports: ["4010:4010"]
+    environment:
+      FAILURE_RATE: "0"
+      LATENCY_MS: "0"
+      WEBHOOK_FAILURE_RATE: "0"
+      WEBHOOK_LATENCY_MS: "0"
+
+  api:
+    build: ./apps/api
+    ports: ["4000:4000"]
+    environment:
+      DATABASE_URL: postgres://meridian:meridian@postgres:5432/meridian
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: dev-secret-change-me
+      ACCESS_TOKEN_TTL: "900"
+      REFRESH_TOKEN_TTL: "604800"
+      BILLING_PROVIDER_URL: http://mock-billing:4010
+      API_PORT: "4000"
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+
+  web:
+    build: ./apps/web
+    ports: ["3000:3000"]
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:4000
+    depends_on: [api]
