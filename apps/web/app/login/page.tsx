@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { setSession } from '../../lib/api';
 
-const BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+const BASE = process.env.NEXT_PUBLIC_API_URL || '';
 
 export default function Login() {
   const router = useRouter();

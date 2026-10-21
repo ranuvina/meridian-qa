@@ -1,0 +1,74 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  checks: write
+
+jobs:
+  test:
+    name: Full suite (unit, integration, API, E2E)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      # Exactly the documented local path: `docker compose up` + one command.
+      - name: Start the stack
+        run: docker compose up -d --build --wait
+
+      - name: Run the suite
+        run: docker compose --profile test run --rm -e CI=true tests
+
+      - name: Job summary
+        if: always()
+        run: cat reports/summary.md >> "$GITHUB_STEP_SUMMARY" || true
+
+      - name: Publish JUnit results
+        if: always()
+        uses: dorny/test-reporter@v1
+        with:
+          name: Test results
+          path: reports/junit/*.xml
+          reporter: java-junit
+          fail-on-error: false
+
+      - name: Upload coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: reports/coverage
+          if-no-files-found: warn
+
+      - name: Upload machine-readable reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports
+          path: |
+            reports/junit
+            reports/summary.json
+            reports/e2e-results.json
+            reports/playwright-report
+          if-no-files-found: warn
+
+      - name: Upload E2E traces
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-traces
+          path: reports/playwright-results
+          if-no-files-found: ignore
+
+      - name: Service logs
+        if: failure()
+        run: docker compose logs --no-color > reports/compose.log 2>&1; tail -200 reports/compose.log
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v

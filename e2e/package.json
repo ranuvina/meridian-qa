@@ -1,0 +1,16 @@
+{
+  "name": "@meridian/e2e",
+  "private": true,
+  "scripts": {
+    "test": "playwright test",
+    "report": "playwright show-report ../reports/playwright-report"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.49.1",
+    "@types/node": "^22.10.2",
+    "@types/pg": "^8.11.10",
+    "bcryptjs": "^2.4.3",
+    "pg": "^8.13.1",
+    "typescript": "^5.7.2"
+  }
+}

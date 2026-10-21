@@ -45,8 +45,11 @@ app.post('/charges', async (req, res) => {
   res.status(201).json(charge);
 });
 
-app.get('/charges', (_req, res) => {
-  res.json([...charges.values()].filter((c) => c && c.id));
+// Charges are stored under both their id and their Idempotency-Key; list each charge once.
+app.get('/charges', (req, res) => {
+  const unique = [...new Map([...charges.values()].map((c) => [c.id, c])).values()];
+  const { tenantId } = req.query;
+  res.json(tenantId ? unique.filter((c) => c.tenantId === tenantId) : unique);
 });
 
 app.post('/_admin/reset', (_req, res) => {
@@ -58,25 +61,37 @@ app.post('/_admin/reset', (_req, res) => {
 // --- webhook receiver -------------------------------------------------------
 const received = [];
 
-app.post('/_webhook', async (req, res) => {
-  const receiverLatency = Number(process.env.WEBHOOK_LATENCY_MS || 0);
+// `/_webhook/:channel` lets parallel tests use isolated receivers.
+app.post(['/_webhook', '/_webhook/:channel'], async (req, res) => {
+  // Per-request overrides (?delayMs=, ?status=) let parallel tests simulate slow or failing
+  // receivers without changing the container's global settings.
+  const receiverLatency = Number(req.query.delayMs ?? process.env.WEBHOOK_LATENCY_MS ?? 0);
   if (receiverLatency) await delay(receiverLatency);
 
   const event = req.body || {};
   received.push({
     id: event.id,
     type: event.type,
+    channel: req.params.channel || null,
+    data: event.data,
+    rawBody: JSON.stringify(event),
     signature: req.get('X-Meridian-Signature'),
     receivedAt: new Date().toISOString(),
   });
 
+  if (req.query.status) {
+    return res.status(Number(req.query.status)).json({ forced: true });
+  }
   if (Number(process.env.WEBHOOK_FAILURE_RATE || 0) > Math.random()) {
     return res.status(500).json({ error: 'receiver_error' });
   }
   res.status(200).json({ ok: true });
 });
 
-app.get('/_webhook/received', (_req, res) => res.json(received));
+app.get('/_webhook/received', (req, res) => {
+  const { channel } = req.query;
+  res.json(channel ? received.filter((r) => r.channel === channel) : received);
+});
 
 app.post('/_webhook/reset', (_req, res) => {
   received.length = 0;

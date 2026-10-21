@@ -5,7 +5,7 @@ import { Pool, PoolClient } from 'pg';
 export class DbService implements OnModuleDestroy {
   readonly pool = new Pool({
     connectionString: process.env.DATABASE_URL,
-    max: 20,
+    max: Number(process.env.DB_POOL_MAX || 20),
   });
 
   async query<T = any>(text: string, params: any[] = []): Promise<T[]> {
