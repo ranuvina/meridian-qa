@@ -65,15 +65,18 @@ curl localhost:4000/api/v1/gw/ping -H "x-api-key: mk_xxxx.yyyy"
 | POST | `/auth/refresh` | |
 | POST | `/auth/logout` | |
 | GET | `/auth/me` | |
-| GET | `/tenant` | Current tenant and effective limits |
+| GET | `/tenant` | Current tenant and effective limits (`limits`, `rateLimit`) |
 | PATCH | `/tenant` | |
+| PATCH | `/tenant/rate-limit` | A1: set rate-limit override (OWNER) |
+| DELETE | `/tenant/rate-limit` | A1: remove override (OWNER) |
 | GET | `/tenant/audit-log` | |
 | GET | `/memberships` | |
 | POST | `/memberships/invite` | |
 | PATCH | `/memberships/:id` | |
 | DELETE | `/memberships/:id` | |
 | GET | `/keys` | |
-| POST | `/keys` | |
+| POST | `/keys` | A2: optional `scopes: ["read"|"write"]` |
+| POST | `/keys/:id/rotate` | A2: `{ gracePeriodSeconds }` (OWNER, ADMIN) |
 | DELETE | `/keys/:id` | Revoke |
 | GET | `/usage/summary` | |
 | GET | `/usage/daily` | |
@@ -108,4 +111,53 @@ Supports `Idempotency-Key` on `POST /charges`. Failure and latency injection via
 
 ## Tests
 
-There is no test suite in this repository.
+Everything runs in Docker. From a clean clone:
+
+```bash
+docker compose up -d --build --wait
+docker compose --profile test run --rm tests
+```
+
+The second command builds a runner image (Node, Playwright and all test dependencies), then runs
+typecheck, unit, integration, API and E2E tests and writes every report to `./reports`. It exits
+non-zero if anything fails. CI (`.github/workflows/ci.yml`) runs exactly these two commands.
+
+> Upgrading an existing checkout: migrations in `db/` run only when Postgres initialises,
+> so run `docker compose down -v` once to pick up `db/002` and `db/003`.
+
+### Layers
+
+| Layer | Where | What it covers | Run on its own |
+|---|---|---|---|
+| Unit | `apps/api/src/**/*.spec.ts` | Plans and limits, RBAC rank rules, scope and grace parsing, URL safety, usage aggregation, billing arithmetic | `docker compose --profile test run --rm tests bash -c "cd apps/api && npm run test:unit"` |
+| Integration | `apps/api/test/integration` | Real Postgres + Redis + mock provider: limiter windows (injected clock), key-cache boundaries, transaction rollback, concurrent rotations, provider and webhook calls | `... npm run test:integration` |
+| API | `apps/api/test/api` | Role x endpoint x tenant matrix generated from `docs/rbac-matrix.md`, tenant-isolation sweep, A1, A2, defect regressions | `... npm run test:api` |
+| E2E | `e2e/tests` | Dashboard journeys through web -> API -> DB (Playwright, Chromium) | `docker compose --profile test run --rm tests bash -c "cd e2e && npx playwright test"` |
+
+One test by name: `... bash -c "cd apps/api && npx jest -t 'DEF-005'"`.
+
+Running the Jest layers on the host instead (Node 22): start `postgres`, `redis` and `mock-billing`, then
+`cd apps/api && npm install && BILLING_PROVIDER_URL=http://localhost:4010 npm test`. Tests use a
+separate `meridian_test` database that is recreated on every run.
+
+### Reports (`./reports`)
+
+| Output | Format |
+|---|---|
+| `junit/api.xml`, `junit/e2e.xml` | JUnit XML (machine-readable) |
+| `summary.json`, `summary.md` | Totals per suite plus coverage |
+| `coverage/` | lcov, cobertura, `coverage-summary.json`; thresholds enforced in `apps/api/jest.config.js` |
+| `playwright-report/` | HTML report (`npx playwright show-report reports/playwright-report`) |
+| `playwright-results/` | Traces, screenshots and video for failed E2E tests |
+
+### Conventions
+
+- **Test data** comes from `apps/api/test/support/factories.ts` (and `e2e/tests/fixtures.ts`). Every test
+  creates its own tenant, users and keys with random identifiers. Nothing is truncated, so files run in
+  parallel and in any order.
+- **Nothing is mocked** below the HTTP boundary: Jest boots the real Nest app in-process against real
+  Postgres and Redis and the mock billing provider. The mock receiver supports per-test channels
+  (`/_webhook/<channel>`) and per-request `?delayMs=` / `?status=`.
+- **Known defects** are kept as regression tests marked `it.failing` / `test.fail`. They assert the
+  correct behaviour and turn red as soon as the behaviour changes. Remove the marker in the fix.
+  See `DEFECTS.md`.
