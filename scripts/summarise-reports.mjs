@@ -19,14 +19,28 @@ if (existsSync(junitDir)) {
     };
   }
 }
+// Tests per layer, from the testcase file attribute in the Jest JUnit report.
+const layers = {};
+const apiXml = join(junitDir, 'api.xml');
+if (existsSync(apiXml)) {
+  for (const m of readFileSync(apiXml, 'utf8').matchAll(/<testcase[^>]*file="([^"]+)"/g)) {
+    const f = m[1];
+    const layer = f.includes('/test/integration/') ? 'integration' : f.includes('/test/api/') ? 'api' : 'unit';
+    layers[layer] = (layers[layer] ?? 0) + 1;
+  }
+}
 const covFile = join(reports, 'coverage', 'coverage-summary.json');
 const coverage = existsSync(covFile) ? JSON.parse(readFileSync(covFile, 'utf8')).total : null;
 
-const summary = { generatedAt: new Date().toISOString(), suites, coverage };
+const summary = { generatedAt: new Date().toISOString(), suites, layers, coverage };
 writeFileSync(join(reports, 'summary.json'), JSON.stringify(summary, null, 2));
 
 const lines = ['## Test results', '', '| Suite | Tests | Failures | Errors | Skipped |', '| --- | --- | --- | --- | --- |'];
 for (const [name, s] of Object.entries(suites)) lines.push(`| ${name} | ${s.tests} | ${s.failures} | ${s.errors} | ${s.skipped} |`);
+if (Object.keys(layers).length) {
+  lines.push('', '## Jest tests per layer', '', '| Layer | Tests |', '| --- | --- |');
+  for (const [k, v] of Object.entries(layers)) lines.push(`| Layer ${k} | ${v} |`);
+}
 if (coverage) {
   lines.push('', '## API coverage', '', '| Metric | % |', '| --- | --- |');
   for (const k of ['statements', 'branches', 'functions', 'lines']) lines.push(`| ${k} | ${coverage[k].pct} |`);
