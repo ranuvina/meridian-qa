@@ -81,9 +81,12 @@ jobs:
           docker compose ps -a > reports/compose-ps.log 2>&1 || true
           docker compose logs --no-color --tail 80 > reports/compose.log 2>&1 || true
           if [ -f reports/tests.log ]; then
-            body=$( { sed 's/\x1b\[[0-9;]*m//g' reports/tests.log | grep -E "^(FAIL) |  ● |Tests:|Test Suites:|error TS|Jest:|threshold|[0-9]+ (passed|failed|flaky)|✘|^== |Statements|Branches|Functions|Lines|Layer |^\| (api|e2e) " | tail -80; } \
-                    | tr -d '\r' | cut -c1-300 | sed -e 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
-            echo "::${level} title=tests.log::${body}"
+            clean() { sed 's/\x1b\[[0-9;]*m//g' reports/tests.log | tr -d '\r'; }
+            enc() { cut -c1-300 | sed -e 's/%/%25/g' | awk '{printf "%s%%0A", $0}'; }
+            body=$(clean | grep -E "^== |Tests:|Test Suites:|Statements|Branches|Functions|Lines|[0-9]+ (passed|failed|flaky)|^\| (api|e2e|Layer) |Jest:|threshold" | enc)
+            echo "::${level} title=results::${body}"
+            fails=$(clean | grep -E "^FAIL |  ● |✘" | head -120 | enc)
+            [ -n "$fails" ] && echo "::${level} title=failures (✘ in E2E includes expected failures)::${fails}" || true
             tc=$(sed 's/\x1b\[[0-9;]*m//g' reports/tests.log | awk '/^== Typecheck/{f=1;next} /^== RESULT Typecheck/{f=0} f' | head -40 \
                  | tr -d '\r' | cut -c1-300 | sed -e 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
             [ -n "$tc" ] && echo "::${level} title=typecheck::${tc}" || true

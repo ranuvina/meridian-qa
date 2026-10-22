@@ -25,7 +25,7 @@ const apiXml = join(junitDir, 'api.xml');
 if (existsSync(apiXml)) {
   for (const m of readFileSync(apiXml, 'utf8').matchAll(/<testcase[^>]*file="([^"]+)"/g)) {
     const f = m[1];
-    const layer = f.includes('/test/integration/') ? 'integration' : f.includes('/test/api/') ? 'api' : 'unit';
+    const layer = /(^|\/)test\/integration\//.test(f) ? 'integration' : /(^|\/)test\/api\//.test(f) ? 'api' : 'unit';
     layers[layer] = (layers[layer] ?? 0) + 1;
   }
 }
