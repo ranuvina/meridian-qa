@@ -13,9 +13,10 @@
 
 ## Reproducing
 
-Fixed defects reproduce on the **pre-fix commit** `25e59d2`. At that commit the regression suite is
-committed and failing, and the CI run for it shows exactly these tests red. Open defects reproduce
-on `main`.
+Fixed defects reproduce on the **pre-fix commit** `25e59d2`, where the regression suite is committed
+and failing. Branch `evidence/pre-fix-regressions` is that commit plus only the current CI files;
+[its CI run](https://github.com/ranuvina/meridian-qa/actions/runs/39732899815) shows 46 API tests and 2 E2E
+journeys failing on the original code. Open defects reproduce on `main`.
 
 ```bash
 git checkout 25e59d2          # fixed defects only; stay on main for open ones

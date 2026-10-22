@@ -1,5 +1,9 @@
 # Meridian
 
+[![CI](https://github.com/ranuvina/meridian-qa/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/ranuvina/meridian-qa/actions/workflows/ci.yml?query=branch%3Amain)
+
+> **Reviewers:** start with [`SUBMISSION.md`](SUBMISSION.md), then [`DEFECTS.md`](DEFECTS.md).
+
 Multi-tenant API usage platform. Tenants issue API keys, traffic flows through a metered
 gateway with per-plan rate limiting, and usage rolls up into reports and overage billing.
 

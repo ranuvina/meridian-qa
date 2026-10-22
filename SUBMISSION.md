@@ -1,7 +1,7 @@
 # Submission: QA Developer technical assessment
 
 **Run it:** `docker compose up -d --build --wait && docker compose --profile test run --rm tests`
-**CI:** _<link to the green GitHub Actions run>_
+**CI:** [![CI](https://github.com/ranuvina/meridian-qa/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/ranuvina/meridian-qa/actions/workflows/ci.yml?query=branch%3Amain) · green run on the fixed code: [run 39732895757](https://github.com/ranuvina/meridian-qa/actions/runs/39732895757) · the same suite failing on the original code: [run 39732899815](https://github.com/ranuvina/meridian-qa/actions/runs/39732899815)
 **Defect reports:** [`DEFECTS.md`](DEFECTS.md) · **How to run each layer:** [`README.md#tests`](README.md#tests)
 
 Commit history is part of the evidence:
@@ -11,7 +11,10 @@ Commit history is part of the evidence:
 | `de0be40` | Repository as provided |
 | `25e59d2` | Test harness, CI and regression tests, **with no fixes**. The defect tests fail here, which proves each reported defect is real. |
 | `09e5651` | Release-blocking fixes, A1 and A2. The same tests now pass. |
-| later | Documentation |
+| `2b5e462` | Documentation |
+| later | Fixes found by the first CI runs (see section 7) and CI reporting improvements |
+
+Branch [`evidence/pre-fix-regressions`](https://github.com/ranuvina/meridian-qa/tree/evidence/pre-fix-regressions) is `25e59d2` plus only the current CI files. Its run ([39732899815](https://github.com/ranuvina/meridian-qa/actions/runs/39732899815)) shows **46 API tests and 2 E2E journeys failing** on the original code, among them the tests for fixed defects DEF-001, 002, 003, 004, 005, 006, 007, 008, 009, 011 and 029. The failing tests are listed in the run's annotations.
 
 ---
 
@@ -39,11 +42,11 @@ Meridian's risk is concentrated in four places, and the suite is weighted the sa
 
 | Layer | Count | Notes |
 |---|---|---|
-| Unit | _n_ | Pure logic: plan limits and ceilings, RBAC rank rules, scope and grace parsing, URL safety (IPv4/IPv6/mapped), usage aggregation, CSV, billing arithmetic |
-| Integration | _n_ | Limiter, key cache, transactions (rollback forced with a per-tenant failing trigger, so parallel tests are unaffected), provider and webhooks |
-| API | _n_ | Authorisation matrix, tenant isolation, A1, A2, defect regressions |
-| E2E | _n_ | Sign-in, key lifecycle UI -> gateway -> revoke, invite, usage plus CSV download, billing view, two known UI defects |
-| Coverage (API) | _x %_ lines | Thresholds enforced in `jest.config.js`: statements 85, branches 70, functions 85, lines 85 |
+| Unit | 116 | Pure logic: plan limits and ceilings, RBAC rank rules, scope and grace parsing, URL safety (IPv4/IPv6/mapped), usage aggregation, CSV, billing arithmetic |
+| Integration | 30 | Limiter, key cache, transactions (rollback forced with a per-tenant failing trigger, so parallel tests are unaffected), provider and webhooks |
+| API | 339 | Authorisation matrix, tenant isolation, A1, A2, defect regressions |
+| E2E | 8 | Sign-in, key lifecycle UI -> gateway -> revoke, invite, usage plus CSV download, billing view, two known UI defects |
+| Coverage (API) | 98.5 % lines | Statements 96.5 %, branches 72.8 %, functions 94.7 %, lines 98.5 %. Thresholds enforced in `jest.config.js`: 85 / 70 / 85 / 85. The pre-fix run also fails the branch threshold (64.8 %) |
 
 ## 2. What I prioritised, what I dropped, and why
 
@@ -165,7 +168,7 @@ Conditions:
 
 ## 7. AI usage disclosure
 
-**Tool:** Claude (Anthropic), used as an agent with file, shell and Git access, in a sandbox that had Docker, Postgres and Redis but **no access to the npm registry**. Nothing could be installed locally, so GitHub Actions was the first place the suite ran.
+**Tool:** Claude (Anthropic), used as an agent with file, shell and Git access, in a sandbox that had Docker, Postgres and Redis but **no access to the npm registry**. Nothing could be installed locally, so GitHub Actions was the first place the suite ran. GitHub's log download was also unreachable from the sandbox, so CI writes its results as run annotations ("Result digest" step), which also makes them readable for a reviewer without opening logs.
 
 **Used for:**
 
@@ -181,7 +184,11 @@ Conditions:
 - The authorisation matrix used a public webhook URL, so `POST /webhooks/test` in a shared org would have run 3 s timeouts x 3 retries x every accumulated endpoint. Switched to the mock receiver.
 - An E2E selector picked the wrong `<select>` on the Members page.
 - The curl helper in the first draft of DEFECTS.md used `eval` quoting that broke the headers. Replaced with `call`/`status` functions.
-- _<issues found by the first CI runs: add here>_
+- **Found by the first CI runs** (each fixed in its own commit on `main`):
+  - The API image did not build: `tenants.controller.ts` relied on discriminated-union narrowing (`!check.ok`), which does not work with this project's `strictNullChecks: false` (TS2339).
+  - The A1 audit insert reused `$1` for a uuid column and a text column. Postgres rejects that ("inconsistent types deduced for parameter"), so **every override change failed**. The A1 tests caught it on the first run.
+  - Two A2 tests expected `200` from the gateway's POST routes. Nest answers POST with `201`, so the tests were wrong, not the API.
+  - `npx tsc` resolved to an unrelated npm package called `tsc`, because the repository root declares npm workspaces. The runner now calls each tool from its package's `node_modules/.bin`.
 
 **My own review and changes:** _<candidate: what you checked, changed, or rejected>_
 
