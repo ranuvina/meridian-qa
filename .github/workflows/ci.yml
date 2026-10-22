@@ -19,7 +19,10 @@ jobs:
 
       # Exactly the documented local path: `docker compose up` + one command.
       - name: Start the stack
-        run: docker compose up -d --build --wait
+        run: |
+          mkdir -p reports
+          set -o pipefail
+          docker compose up -d --build --wait 2>&1 | tee reports/compose-up.log
 
       - name: Run the suite
         run: docker compose --profile test run --rm -e CI=true tests
@@ -67,7 +70,15 @@ jobs:
 
       - name: Service logs
         if: failure()
-        run: docker compose logs --no-color > reports/compose.log 2>&1; tail -200 reports/compose.log
+        run: |
+          docker compose ps -a > reports/compose-ps.log 2>&1 || true
+          docker compose logs --no-color --tail 80 > reports/compose.log 2>&1 || true
+          # Surface the tail of each log as an annotation so failures are readable from the API/UI
+          for f in reports/compose-up.log reports/compose-ps.log reports/compose.log; do
+            [ -f "$f" ] || continue
+            body=$(tail -60 "$f" | sed -e 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
+            echo "::error title=$(basename $f)::${body}"
+          done
 
       - name: Tear down
         if: always()
