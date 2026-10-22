@@ -37,8 +37,9 @@ describe('A2 key scopes and rotation', () => {
     it('a write-only key may POST but not GET', async () => {
       const res = await createKey({ name: 'Writer', scopes: ['write'] });
       const g = gw(res.body.secret);
-      expect((await g.echo()).status).toBe(200);
-      expect((await g.transform()).status).toBe(200);
+      // Nest answers POST with 201 Created
+      expect((await g.echo()).status).toBe(201);
+      expect((await g.transform()).status).toBe(201);
       expect((await g.ping()).status).toBe(403);
     });
 
@@ -56,7 +57,7 @@ describe('A2 key scopes and rotation', () => {
     it('keys that existed before scopes were introduced keep full access', async () => {
       const legacy = await createApiKey(org.tenant); // inserted without a scopes value: column default
       const g = gw(legacy.secret);
-      expect([(await g.ping()).status, (await g.echo()).status, (await g.transform()).status]).toEqual([200, 200, 200]);
+      expect([(await g.ping()).status, (await g.echo()).status, (await g.transform()).status]).toEqual([200, 201, 201]);
     });
 
     it.each([[[]], [['admin']], [['READ']], ['read'], [[null]]])('rejects scopes %p with 400', async (scopes) => {
