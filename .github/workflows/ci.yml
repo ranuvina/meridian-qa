@@ -19,10 +19,16 @@ jobs:
 
       # Exactly the documented local path: `docker compose up` + one command.
       - name: Start the stack
-        run: docker compose up -d --build --wait
+        run: |
+          mkdir -p reports
+          set -o pipefail
+          BUILDKIT_PROGRESS=plain docker compose up -d --build --wait 2>&1 | tee reports/compose-up.log
 
       - name: Run the suite
-        run: docker compose --profile test run --rm -e CI=true tests
+        id: suite
+        run: |
+          set -o pipefail
+          docker compose --profile test run --rm -e CI=true tests 2>&1 | tee reports/tests.log
 
       - name: Job summary
         if: always()
@@ -65,9 +71,31 @@ jobs:
           path: reports/playwright-results
           if-no-files-found: ignore
 
-      - name: Service logs
-        if: failure()
-        run: docker compose logs --no-color > reports/compose.log 2>&1; tail -200 reports/compose.log
+      - name: Result digest
+        if: always()
+        env:
+          SUITE: ${{ steps.suite.outcome }}
+        run: |
+          # Annotations make the digest readable from the run page (and the API) without downloading logs.
+          level=notice; [ "$SUITE" = success ] || level=error
+          docker compose ps -a > reports/compose-ps.log 2>&1 || true
+          docker compose logs --no-color --tail 80 > reports/compose.log 2>&1 || true
+          if [ -f reports/tests.log ]; then
+            body=$( { sed 's/\x1b\[[0-9;]*m//g' reports/tests.log | grep -E "^(FAIL) |  ● |Tests:|Test Suites:|error TS|Jest:|threshold|[0-9]+ (passed|failed|flaky)|✘|^== |Statements|Branches|Functions|Lines|Layer |^\| (api|e2e) " | tail -80; } \
+                    | tr -d '\r' | cut -c1-300 | sed -e 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
+            echo "::${level} title=tests.log::${body}"
+            tc=$(sed 's/\x1b\[[0-9;]*m//g' reports/tests.log | awk '/^== Typecheck/{f=1;next} /^== RESULT Typecheck/{f=0} f' | head -40 \
+                 | tr -d '\r' | cut -c1-300 | sed -e 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
+            [ -n "$tc" ] && echo "::${level} title=typecheck::${tc}" || true
+          fi
+          # Service logs only matter when something failed
+          [ "$level" = error ] || exit 0
+          for f in reports/compose-up.log reports/compose-ps.log reports/compose.log; do
+            [ -f "$f" ] || continue
+            body=$( { grep -iE "error|failed|exit code|unhealthy|cannot|not found" "$f" | tail -40; echo '--- tail ---'; tail -25 "$f"; } \
+                    | tr -d '\r' | cut -c1-300 | sed -e 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
+            echo "::error title=$(basename $f)::${body}"
+          done
 
       - name: Tear down
         if: always()
