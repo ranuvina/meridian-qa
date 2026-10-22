@@ -89,11 +89,12 @@ export class TenantsController {
       if (previous !== next) {
         await client.query(
           `INSERT INTO audit_log (tenant_id, actor_id, action, target, metadata)
-           VALUES ($1, $2, $3, $1, $4)`,
+           VALUES ($1, $2, $3, $4, $5)`,
           [
             actor.tenantId,
             actor.userId,
             next === null ? 'tenant.rate_limit_override.removed' : 'tenant.rate_limit_override.set',
+            actor.tenantId,
             JSON.stringify({ previous, new: next }),
           ],
         );

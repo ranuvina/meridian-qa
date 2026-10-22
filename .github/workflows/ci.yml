@@ -25,7 +25,9 @@ jobs:
           BUILDKIT_PROGRESS=plain docker compose up -d --build --wait 2>&1 | tee reports/compose-up.log
 
       - name: Run the suite
-        run: docker compose --profile test run --rm -e CI=true tests
+        run: |
+          set -o pipefail
+          docker compose --profile test run --rm -e CI=true tests 2>&1 | tee reports/tests.log
 
       - name: Job summary
         if: always()
@@ -69,11 +71,16 @@ jobs:
           if-no-files-found: ignore
 
       - name: Service logs
-        if: failure()
+        if: always()
         run: |
           docker compose ps -a > reports/compose-ps.log 2>&1 || true
           docker compose logs --no-color --tail 80 > reports/compose.log 2>&1 || true
           # Surface the tail of each log as an annotation so failures are readable from the API/UI
+          if [ -f reports/tests.log ]; then
+            body=$( { grep -E "^(FAIL|PASS) |  ● |Tests:|Test Suites:|error TS|Jest:|threshold|[0-9]+ (passed|failed|flaky)|✘|^== " reports/tests.log | grep -v "^PASS" | tail -70; } \
+                    | sed 's/\x1b\[[0-9;]*m//g' | tr -d '\r' | cut -c1-300 | sed -e 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
+            echo "::error title=tests.log::${body}"
+          fi
           for f in reports/compose-up.log reports/compose-ps.log reports/compose.log; do
             [ -f "$f" ] || continue
             body=$( { grep -iE "error|failed|exit code|unhealthy|cannot|not found" "$f" | tail -40; echo '--- tail ---'; tail -25 "$f"; } \
