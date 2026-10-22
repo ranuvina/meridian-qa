@@ -12,9 +12,9 @@ run() { # run <name> <command...>
   [ $rc -eq 0 ] || status=1
 }
 
-run "Typecheck (API)" bash -c "cd apps/api && npx tsc --noEmit --pretty false -p tsconfig.json"
-run "API: unit + integration + API layers, with coverage thresholds" bash -c "cd apps/api && npx jest --ci --coverage"
-run "End-to-end (Playwright)" bash -c "cd e2e && npx playwright test"
+run "Typecheck (API)" bash -c "cd apps/api && ./node_modules/.bin/tsc --noEmit --pretty false -p tsconfig.json"
+run "API: unit + integration + API layers, with coverage thresholds" bash -c "cd apps/api && ./node_modules/.bin/jest --ci --coverage"
+run "End-to-end (Playwright)" bash -c "cd e2e && ./node_modules/.bin/playwright test"
 
 node scripts/summarise-reports.mjs || true
 exit $status
