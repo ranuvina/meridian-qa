@@ -77,8 +77,8 @@ jobs:
           docker compose logs --no-color --tail 80 > reports/compose.log 2>&1 || true
           # Surface the tail of each log as an annotation so failures are readable from the API/UI
           if [ -f reports/tests.log ]; then
-            body=$( { grep -E "^(FAIL|PASS) |  ● |Tests:|Test Suites:|error TS|Jest:|threshold|[0-9]+ (passed|failed|flaky)|✘|^== " reports/tests.log | grep -v "^PASS" | tail -70; } \
-                    | sed 's/\x1b\[[0-9;]*m//g' | tr -d '\r' | cut -c1-300 | sed -e 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
+            body=$( { sed 's/\x1b\[[0-9;]*m//g' reports/tests.log | grep -E "^(FAIL) |  ● |Tests:|Test Suites:|error TS|Jest:|threshold|[0-9]+ (passed|failed|flaky)|✘|^== |Statements|Branches|Functions|Lines" | tail -80; } \
+                    | tr -d '\r' | cut -c1-300 | sed -e 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
             echo "::error title=tests.log::${body}"
           fi
           for f in reports/compose-up.log reports/compose-ps.log reports/compose.log; do
