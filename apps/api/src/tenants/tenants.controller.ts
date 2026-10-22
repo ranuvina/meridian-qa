@@ -77,7 +77,7 @@ export class TenantsController {
       const current = rows[0];
       if (validate) {
         const check = validateRateLimitOverride(current.plan, next);
-        if (!check.ok) throw new BadRequestException(check.reason);
+        if (check.ok === false) throw new BadRequestException(check.reason);
       }
       const previous: number | null = current.rate_limit_override;
 
