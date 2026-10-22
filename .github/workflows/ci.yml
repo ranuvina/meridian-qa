@@ -80,6 +80,9 @@ jobs:
             body=$( { sed 's/\x1b\[[0-9;]*m//g' reports/tests.log | grep -E "^(FAIL) |  ● |Tests:|Test Suites:|error TS|Jest:|threshold|[0-9]+ (passed|failed|flaky)|✘|^== |Statements|Branches|Functions|Lines" | tail -80; } \
                     | tr -d '\r' | cut -c1-300 | sed -e 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
             echo "::error title=tests.log::${body}"
+            tc=$(sed 's/\x1b\[[0-9;]*m//g' reports/tests.log | awk '/^== Typecheck/{f=1;next} /^== RESULT Typecheck/{f=0} f' | head -40 \
+                 | tr -d '\r' | cut -c1-300 | sed -e 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
+            [ -n "$tc" ] && echo "::error title=typecheck::${tc}"
           fi
           for f in reports/compose-up.log reports/compose-ps.log reports/compose.log; do
             [ -f "$f" ] || continue
